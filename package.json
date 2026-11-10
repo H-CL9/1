@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "web": "dsh web",
-    "web:no-open": "dsh web --no-open"
+    "web:no-open": "dsh web --no-open",
+    "map": "node start.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.2-rc.1"

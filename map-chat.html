@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Harness · 天地图 + MapLibre 地图</title>
+
+<!-- 唯一外部依赖：MapLibre GL JS（CDN） -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+
+<style>
+/* =========================================================
+   1. 主题变量
+   ========================================================= */
+:root {
+  --blue: #3370ff;
+  --blue-strong: #245bdb;
+  --blue-weak: #eaf1ff;
+  --blue-soft: #f3f7ff;
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --text: #1b2330;
+  --muted: #6c7686;
+  --muted-2: #98a0ae;
+  --border: #e4e9f2;
+  --border-strong: #d3dae6;
+  --shadow: 0 6px 22px rgba(24, 45, 80, .10);
+  --shadow-sm: 0 2px 8px rgba(24, 45, 80, .08);
+  --danger: #e5484d;
+  --danger-bg: #fff2f3;
+  --danger-border: #ffc9cd;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --map-dim: brightness(1);
+  --scrollbar: #cfd6e2;
+}
+
+body.dark {
+  --blue: #4f86ff;
+  --blue-strong: #3370ff;
+  --blue-weak: #1b2c4f;
+  --blue-soft: #1a2333;
+  --bg: #12151c;
+  --panel: #1a1e27;
+  --card: #222834;
+  --text: #e8ecf4;
+  --muted: #9aa4b5;
+  --muted-2: #6f7a8c;
+  --border: #2c333f;
+  --border-strong: #3a4351;
+  --shadow: 0 6px 24px rgba(0, 0, 0, .38);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, .30);
+  --danger-bg: #361d21;
+  --danger-border: #6a2d34;
+  --map-dim: brightness(.72) saturate(.92) contrast(1.02);
+  --scrollbar: #394252;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  transition: background .25s ease, color .25s ease;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+button { cursor: pointer; }
+
+a { color: var(--blue); text-decoration: none; }
+
+/* =========================================================
+   2. 双栏布局（左侧地图 + 右侧对话，互不遮挡）
+   ========================================================= */
+#app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 500px;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#mapPane {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #e8eef7;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  transition: filter .25s ease;
+}
+
+body.dark #map .maplibregl-canvas { filter: var(--map-dim); }
+
+/* =========================================================
+   3. 左上角地图设置卡片
+   ========================================================= */
+.settings-card {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  width: 304px;
+  padding: 14px 14px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.settings-card.hidden {
+  opacity: 0;
+  transform: translateY(-8px) scale(.98);
+  pointer-events: none;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.card-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--blue);
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-shadow: 0 3px 8px rgba(51, 112, 255, .30);
+}
+
+.card-logo svg { width: 16px; height: 16px; }
+
+.card-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-close {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.card-close:hover { background: var(--blue-weak); color: var(--blue); }
+
+.field { margin-bottom: 11px; }
+
+.field label,
+.field-title {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .2px;
+}
+
+.field-row { display: flex; gap: 7px; }
+
+.field input[type="text"],
+.field input[type="password"],
+.field input[type="url"] {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.field input:focus {
+  border-color: var(--blue);
+  background: var(--card);
+  box-shadow: 0 0 0 3px rgba(51, 112, 255, .13);
+}
+
+.save-btn {
+  flex: none;
+  height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--blue);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 3px 9px rgba(51, 112, 255, .28);
+  transition: background .15s ease, transform .1s ease;
+}
+.save-btn:hover { background: var(--blue-strong); }
+.save-btn:active { transform: translateY(1px); }
+
+.no-key-hint {
+  margin: 0 0 11px;
+  padding: 8px 10px;
+  border: 1px solid #ffe0b2;
+  border-radius: 9px;
+  background: #fff8ec;
+  color: #8a5a00;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+body.dark .no-key-hint {
+  background: #2d2516;
+  border-color: #6b5220;
+  color: #e8c27c;
+}
+
+.no-key-hint a { color: inherit; font-weight: 700; text-decoration: underline; }
+
+/* 分段切换控件 */
+.seg {
+  display: flex;
+  padding: 3px;
+  gap: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.seg button {
+  flex: 1;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all .16s ease;
+}
+
+.seg button.active {
+  background: var(--card);
+  color: var(--blue);
+  box-shadow: var(--shadow-sm);
+}
+
+.seg button.disabled { opacity: .42; cursor: not-allowed; }
+
+/* iOS 风格开关 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 34px;
+  padding: 0 2px;
+  margin-bottom: 4px;
+}
+
+.switch-row span { font-size: 12.5px; font-weight: 600; color: var(--text); }
+
+.ios-switch {
+  position: relative;
+  width: 42px;
+  height: 25px;
+  flex: none;
+}
+
+.ios-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.ios-switch .track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #d6dce8;
+  transition: background .2s ease;
+}
+
+body.dark .ios-switch .track { background: #394252; }
+
+.ios-switch .track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .22);
+  transition: transform .2s cubic-bezier(.3, .9, .4, 1.2);
+}
+
+.ios-switch input:checked + .track { background: var(--blue); }
+.ios-switch input:checked + .track::after { transform: translateX(17px); }
+.ios-switch input:disabled + .track { opacity: .45; }
+
+.privacy-mini {
+  margin: 8px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-2);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+/* =========================================================
+   4. 地图右侧竖排控制按钮
+   ========================================================= */
+.map-ctrl-stack {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  place-items: center;
+  transition: background .15s ease, color .15s ease, transform .1s ease, border-color .15s ease;
+}
+
+.map-btn:hover {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(51, 112, 255, .30);
+}
+
+.map-btn:active { transform: scale(.94); }
+
+.map-btn svg { width: 19px; height: 19px; }
+.map-btn .plusminus { font-size: 20px; font-weight: 500; line-height: 1; }
+
+#btnCompass svg { transition: transform .12s linear; transform-origin: 50% 50%; }
+
+/* =========================================================
+   5. 左下角读数 + 比例尺、右下角主题/设置
+   ========================================================= */
+.map-readout {
+  position: absolute;
+  left: 16px;
+  bottom: 52px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.map-readout .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 3px rgba(51, 112, 255, .16);
+}
+
+.map-bottom-right {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 25;
+  display: flex;
+  gap: 8px;
+}
+
+.map-credits {
+  position: absolute;
+  right: 16px;
+  bottom: 64px;
+  z-index: 18;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.map-credits a { color: inherit; text-decoration: underline; }
+
+/* MapLibre 自带比例尺样式适配 */
+.maplibregl-ctrl-bottom-left { z-index: 20; }
+.maplibregl-ctrl-scale {
+  border: 1px solid var(--border) !important;
+  border-top: 0 !important;
+  border-radius: 0 0 6px 6px;
+  background: color-mix(in srgb, var(--card) 90%, transparent) !important;
+  color: var(--muted) !important;
+  font-size: 10px !important;
+  padding: 1px 5px !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 定位蓝点 */
+.geo-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--blue);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 4px rgba(51, 112, 255, .22), 0 2px 6px rgba(0, 0, 0, .25);
+  position: relative;
+}
+.geo-marker::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 2px solid rgba(51, 112, 255, .45);
+  animation: geoPulse 1.8s ease-out infinite;
+}
+@keyframes geoPulse {
+  0% { transform: scale(.55); opacity: .9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* 打开页面时的定位等待层：定位完成前不创建地图，避免先闪现西安视角 */
+.locate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  display: grid;
+  place-items: center;
+  background: #e8eef7;
+  transition: opacity .25s ease, visibility .25s ease;
+}
+body.dark .locate-overlay { background: #1b2029; }
+.locate-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.locate-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: min(320px, calc(100% - 40px));
+  padding: 22px 24px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.locate-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  border-top-color: var(--blue);
+  animation: locateSpin .9s linear infinite;
+}
+@keyframes locateSpin { to { transform: rotate(360deg); } }
+.locate-title {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.locate-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.locate-skip {
+  margin-top: 2px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--blue);
+  font-size: 12px;
+}
+.locate-skip:hover { background: var(--blue-weak); }
+
+/* 轻提示 */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 88px;
+  z-index: 60;
+  transform: translate(-50%, 10px);
+  max-width: min(76%, 520px);
+  padding: 9px 15px;
+  border-radius: 10px;
+  background: rgba(25, 32, 45, .92);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .24);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* =========================================================
+   6. 右侧对话面板
+   ========================================================= */
+#chatPanel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.chat-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 64px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #4b86ff, #245bdb);
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-shadow: 0 4px 12px rgba(51, 112, 255, .26);
+}
+.brand-logo svg { width: 23px; height: 23px; }
+
+.brand-text { min-width: 0; }
+.brand-text h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  white-space: nowrap;
+}
+.brand-text p {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: var(--muted-2);
+  letter-spacing: .3px;
+}
+
+.head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.head-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aeb7c6;
+  transition: background .2s ease, box-shadow .2s ease;
+}
+.head-status.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .16); }
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  transition: all .15s ease;
+}
+.icon-btn:hover { background: var(--blue-weak); color: var(--blue); border-color: var(--border); }
+.icon-btn svg { width: 17px; height: 17px; }
+/* =========================================================
+   6. 右侧：DeepSeek Harness 原版 Web UI 面板
+   ========================================================= */
+#chatPanel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.chat-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 64px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.native-badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 2px 6px;
+  border: 1px solid rgba(51, 112, 255, .35);
+  border-radius: 5px;
+  background: var(--blue-weak);
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  vertical-align: 2px;
+}
+
+.head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  transition: all .15s ease;
+}
+.icon-btn:hover { background: var(--blue-weak); color: var(--blue); border-color: var(--border); }
+.icon-btn svg { width: 17px; height: 17px; }
+
+/* ---- Harness 地址配置条 ---- */
+.harness-config {
+  flex: none;
+  padding: 11px 14px 12px;
+  background: var(--blue-soft);
+  border-bottom: 1px solid var(--border);
+  transition: background .2s ease;
+}
+body.dark .harness-config { background: #191d26; }
+
+.harness-config label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.harness-url-row { display: flex; gap: 7px; }
+
+.harness-url-row input {
+  width: 100%;
+  min-width: 0;
+  height: 33px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.harness-url-row input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(51, 112, 255, .12);
+}
+
+.apply-btn {
+  flex: none;
+  height: 33px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  box-shadow: 0 3px 9px rgba(51, 112, 255, .26);
+  transition: background .15s ease, transform .1s ease;
+}
+.apply-btn:hover { background: var(--blue-strong); }
+.apply-btn:active { transform: translateY(1px); }
+
+.harness-hint {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+.harness-hint b { color: var(--text); font-weight: 650; }
+
+/* ---- 原版 Harness 画布区 ---- */
+.harness-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #f3f4f7;
+  overflow: hidden;
+}
+body.dark .harness-stage { background: #0f1218; }
+
+#harnessFrame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+body.dark #harnessFrame { background: #151517; }
+
+.harness-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+.harness-loading.hidden { display: none; }
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid var(--border-strong);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.harness-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+.notice-card {
+  width: 100%;
+  max-width: 330px;
+  padding: 24px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.notice-icon {
+  width: 50px;
+  height: 50px;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  background: var(--blue-weak);
+  color: var(--blue);
+  display: grid;
+  place-items: center;
+}
+.notice-icon svg { width: 26px; height: 26px; }
+
+.notice-card h2 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.notice-card p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: left;
+}
+.notice-card p b { color: var(--text); }
+
+.notice-cmd {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  word-break: break-all;
+  text-align: left;
+  user-select: all;
+}
+
+.notice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  margin-top: 5px;
+  padding: 0 18px;
+  border-radius: 9px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 650;
+  box-shadow: 0 4px 12px rgba(51, 112, 255, .27);
+}
+.notice-btn:hover { background: var(--blue-strong); }
+
+.notice-secondary {
+  margin: 14px 0 0 !important;
+  color: var(--muted-2) !important;
+  font-size: 10.5px !important;
+  text-align: center !important;
+}
+
+/* =========================================================
+   7. 响应式：窄屏仍保持双栏，仅收窄右侧面板
+   ========================================================= */
+@media (max-width: 1080px) {
+  #app { grid-template-columns: minmax(0, 1fr) 470px; }
+}
+
+@media (max-width: 880px) {
+  #app { grid-template-columns: minmax(0, 1fr) 420px; }
+  .settings-card { width: 278px; }
+  .map-readout { font-size: 10.5px; }
+  .harness-config { padding: 9px 12px 10px; }
+}
+
+@media (max-width: 720px) {
+  #app { grid-template-columns: minmax(0, 1fr) 380px; }
+  .settings-card { width: 252px; }
+  .brand-text p { display: none; }
+  .harness-hint { display: none; }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+
+</head>
+<body>
+
+<div id="app">
+
+  <!-- =====================================================
+       左侧：全屏地图
+       ===================================================== -->
+  <main id="mapPane">
+
+    <div id="map"></div>
+
+    <!-- 打开时的定位等待层：定位完成前地图不创建，避免先显示默认西安视角 -->
+    <div class="locate-overlay" id="locateOverlay" role="status" aria-live="polite">
+      <div class="locate-panel">
+        <span class="locate-spinner" aria-hidden="true"></span>
+        <p class="locate-title" id="locateTitle">正在定位当前位置…</p>
+        <p class="locate-sub" id="locateSub">首次使用请允许浏览器定位</p>
+        <button class="locate-skip" id="btnSkipLocate" type="button">跳过定位，先用默认位置</button>
+      </div>
+    </div>
+
+    <!-- 左上角设置卡片 -->
+    <section class="settings-card" id="settingsCard" aria-label="地图设置">
+      <div class="card-head">
+        <span class="card-logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none">
+            <path d="M9 36c0-11.5 9-20 22-20 8 0 14.5 3.6 18.5 9 4.5-1 8-3.5 10-7v10.5C59.5 42 48.5 51 34 51 19 51 9 45 9 36Z" fill="#fff"/>
+            <circle cx="24" cy="31" r="2.8" fill="#3370ff"/>
+            <path d="M35 24.5c4.4 2 7.6 5.4 9.4 9.6" stroke="#3370ff" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+          </svg>
+        </span>
+        <h2>天地图 | MapLibre GL JS</h2>
+        <button class="card-close" id="cardClose" type="button" title="收起设置">×</button>
+      </div>
+
+      <div class="field">
+        <label for="tdtKey">天地图开发者 Key</label>
+        <div class="field-row">
+          <input id="tdtKey" type="text" placeholder="粘贴天地图 Key" autocomplete="off" spellcheck="false">
+          <button class="save-btn" id="saveKey" type="button">保存</button>
+        </div>
+      </div>
+
+      <div class="no-key-hint" id="noKeyHint">
+        未填写天地图 Key，底图已关闭。填写并保存后即可加载天地图。
+        <a href="https://console.tianditu.gov.cn/" target="_blank" rel="noopener">申请 Key ↗</a>
+      </div>
+
+      <div class="field">
+        <span class="field-title">底图类型</span>
+        <div class="seg" id="baseSeg">
+          <button type="button" data-base="vec" class="active">矢量</button>
+          <button type="button" data-base="img">影像</button>
+          <button type="button" data-base="ter">地形</button>
+        </div>
+      </div>
+
+      <div class="switch-row">
+        <span>地名/路名标记</span>
+        <label class="ios-switch">
+          <input type="checkbox" id="labelSwitch" checked>
+          <span class="track"></span>
+        </label>
+      </div>
+
+      <p class="privacy-mini">
+        Key 仅保存在本机浏览器 localStorage；定位结果只在本机用于移动地图中心。
+      </p>
+    </section>
+
+    <!-- 右侧竖排地图控制 -->
+    <div class="map-ctrl-stack" aria-label="地图控制">
+      <button class="map-btn" id="btnZoomIn" type="button" title="放大">
+        <span class="plusminus">+</span>
+      </button>
+      <button class="map-btn" id="btnZoomOut" type="button" title="缩小">
+        <span class="plusminus">−</span>
+      </button>
+      <button class="map-btn" id="btnCompass" type="button" title="指北复位">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.2" opacity=".32"/>
+          <path d="M12 3.1 14.7 12 12 10.3 9.3 12 12 3.1Z" fill="currentColor"/>
+          <path d="M12 20.9 9.3 12 12 13.7 14.7 12 12 20.9Z" fill="currentColor" opacity=".26"/>
+        </svg>
+      </button>
+      <button class="map-btn" id="btnFullscreen" type="button" title="全屏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+      <button class="map-btn" id="btnLocate" type="button" title="定位当前位置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="6.2"/>
+          <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 左下角实时读数（比例尺由 MapLibre ScaleControl 提供） -->
+    <div class="map-readout" id="mapReadout">
+      <span class="dot"></span>
+      <span id="readoutText">108.9398°E · 34.3416°N · Z 8.20</span>
+    </div>
+
+    <!-- 右下角：数据来源、夜间模式、设置齿轮 -->
+    <div class="map-credits" id="mapCredits">
+      © <a href="https://www.tianditu.gov.cn/" target="_blank" rel="noopener">天地图</a> ·
+      <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a>
+    </div>
+
+    <div class="map-bottom-right">
+      <button class="map-btn" id="btnTheme" type="button" title="切换夜间模式">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+        </svg>
+      </button>
+      <button class="map-btn" id="btnGear" type="button" title="显示/隐藏地图设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.1"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.36.5.6.9.66H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.34Z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <!-- =====================================================
+       右侧：DeepSeek Harness 原版 Web UI（iframe 内嵌）
+       ===================================================== -->
+  <aside id="chatPanel" aria-label="DeepSeek Harness 原版对话">
+    <header class="chat-head">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none">
+          <path d="M9 36c0-11.5 9-20 22-20 8 0 14.5 3.6 18.5 9 4.5-1 8-3.5 10-7v10.5C59.5 42 48.5 51 34 51 19 51 9 45 9 36Z" fill="#fff"/>
+          <circle cx="24" cy="31" r="2.8" fill="#245bdb"/>
+          <path d="M35 24.5c4.4 2 7.6 5.4 9.4 9.6" stroke="#245bdb" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+          <path d="M26 16c0-4-2-7-5-9 4 0 6 2 7.2 5 1-3 3.2-4.6 6-5-2.4 3-3.4 6-2.8 9" fill="#bfd3ff"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>DeepSeek Harness<span class="native-badge">原版</span></h1>
+        <p>DSH WEB · MAP CONTEXT</p>
+      </div>
+      <div class="head-actions">
+        <button class="icon-btn" id="btnOpenHarness" type="button" title="在新标签页打开 Harness">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 3h7v7M21 3l-9 9M10 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="btnReloadHarness" type="button" title="重新加载 Harness">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+            <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6M20.5 3v5h-5"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="harness-config" aria-label="Harness 连接地址">
+      <label for="harnessUrl">dsh web 服务地址</label>
+      <div class="harness-url-row">
+        <input id="harnessUrl" type="url" value="http://127.0.0.1:3080"
+               placeholder="http://127.0.0.1:3080" autocomplete="off" spellcheck="false">
+        <button class="apply-btn" id="applyHarness" type="button">应用</button>
+      </div>
+      <p class="harness-hint" id="harnessHint">
+        右侧为 <b>原版 dsh web</b> 界面。首次使用请先运行 <b>npm run web</b> 完成登录；
+        若显示 authentication required，请双击同目录的 <b>启动地图对话.bat</b> 后重试。
+      </p>
+    </section>
+
+    <div class="harness-stage" id="harnessStage">
+      <iframe id="harnessFrame" title="DeepSeek Harness 原版 Web UI"
+              allow="clipboard-read; clipboard-write"></iframe>
+
+      <div class="harness-loading" id="harnessLoading">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>正在加载 DeepSeek Harness…</span>
+      </div>
+
+      <div class="harness-notice" id="harnessNotice" hidden>
+        <div class="notice-card">
+          <div class="notice-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <rect x="4" y="10" width="16" height="11" rx="2.4"/>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>
+            </svg>
+          </div>
+          <h2 id="noticeTitle">Harness 面板未加载</h2>
+          <p id="noticeBody"></p>
+          <p class="notice-cmd" id="noticeCmd" hidden></p>
+          <a class="notice-btn" id="noticeAction" href="#" hidden>打开本地版本</a>
+          <p class="notice-secondary">Harness 必须运行在本机 127.0.0.1，登录态仅保存在你的浏览器。</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =======================================================
+     通用工具：DOM、localStorage、防抖、轻提示
+     ======================================================= */
+  const $ = (id) => document.getElementById(id);
+
+  const store = {
+    get(key, fallback) {
+      try {
+        const v = localStorage.getItem(key);
+        return v === null ? fallback : v;
+      } catch (e) {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, value); } catch (e) { /* 忽略隐私模式下的写入失败 */ }
+    },
+    del(key) {
+      try { localStorage.removeItem(key); } catch (e) { /* 忽略 */ }
+    },
+    getJSON(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (e) {
+        return fallback;
+      }
+    }
+  };
+
+  function debounce(fn, wait) {
+    let timer = null;
+    return function () {
+      const args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(null, args), wait);
+    };
+  }
+
+  let toastTimer = null;
+  function toast(message) {
+    const el = $('toast');
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  /* =======================================================
+     本地存储键名（全部只保存在本机浏览器）
+     ======================================================= */
+  const LS = {
+    tdtKey: 'dshmap.tdtKey',
+    base: 'dshmap.baseType',
+    labels: 'dshmap.labels',
+    theme: 'dshmap.theme',
+    keyVersion: 'dshmap.keyVersion',
+    harnessUrl: 'dsh.harness.url'
+  };
+
+  /* =======================================================
+     全局状态
+     ======================================================= */
+  const DEFAULT_CENTER = [108.9398, 34.3416]; // 定位失败时的兜底中心（西安）
+  const DEFAULT_ZOOM = 8.2;
+  const LOCATION_ZOOM = 14; // 打开时定位到当前位置后使用的级别
+
+  // 默认天地图 Key（浏览器端类型）；用户清空后不会自动回填
+  const DEFAULT_TDT_KEY = '3a6361c10a28d8e6c2f83d1aab1d9d94';
+  const DEFAULT_HARNESS_URL = 'http://127.0.0.1:3080';
+
+  // 首次加载新版本时：旧版本遗留的无效/空 Key 用默认 Key替换；
+  // 合法 Key 与用户明确清空后的空值保持不变。
+  const KEY_VERSION = '1';
+  if (store.get(LS.keyVersion, '') !== KEY_VERSION) {
+    const saved = store.get(LS.tdtKey, null);
+    const trimmed = saved === null ? '' : saved.trim();
+    if (!trimmed || !/^[0-9a-f]{32}$/i.test(trimmed)) {
+      store.set(LS.tdtKey, DEFAULT_TDT_KEY);
+    }
+    store.set(LS.keyVersion, KEY_VERSION);
+  }
+
+  const state = {
+    tdtKey: store.get(LS.tdtKey, DEFAULT_TDT_KEY).trim(),
+    baseType: store.get(LS.base, 'vec'),
+    labels: store.get(LS.labels, '1') === '1',
+    theme: store.get(LS.theme, 'light'),
+    lastLocation: null,
+    marker: null,
+    harnessUrl: store.get(LS.harnessUrl, DEFAULT_HARNESS_URL)
+  };
+
+  let map = null;
+  let terrainZoomHinted = false;
+  let startupResolved = false;
+  let locateOverlayTimer = null;
+
+  /* =======================================================
+     天地图配置
+     -------------------------------------------------------
+     vec_w + cva_w：矢量底图 + 矢量注记
+     img_w + cia_w：影像底图 + 影像注记
+     ter_w + cta_w：地形底图 + 地形注记
+     ======================================================= */
+  // maxzoom 是天地图该图层真正有数据的最高级别：
+  // 矢量/影像到 18 级；地形和地形注记到 14 级（15 级起返回空白占位图）。
+  const TDT_LAYERS = {
+    vec: { base: 'vec_w', anno: 'cva_w', maxzoom: 18 },
+    img: { base: 'img_w', anno: 'cia_w', maxzoom: 18 },
+    ter: { base: 'ter_w', anno: 'cta_w', maxzoom: 14 }
+  };
+
+  const TDT_HOST = 'https://t0.tianditu.gov.cn';
+
+  /** 生成天地图 DataServer 瓦片模板，{x}/{y}/{z} 由 MapLibre 替换 */
+  function tdtTileUrl(layer, key) {
+    return TDT_HOST + '/DataServer?T=' + layer +
+           '&x={x}&y={y}&l={z}&tk=' + encodeURIComponent(key);
+  }
+
+  /** 更新右下角数据来源标注 */
+  function updateCredits(kind) {
+    const el = $('mapCredits');
+    if (!el) return;
+    if (kind === 'tdt') {
+      el.style.display = '';
+      el.innerHTML = '© <a href="https://www.tianditu.gov.cn/" target="_blank" rel="noopener">天地图</a>' +
+                     ' · <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a>';
+    } else {
+      el.style.display = 'none';
+      el.innerHTML = '';
+    }
+  }
+
+  /** 构造 MapLibre 样式：有 Key 用天地图，无 Key 只保留纯色画布 */
+  function buildMapStyle() {
+    const isDark = state.theme === 'dark';
+    const background = {
+      id: 'bg',
+      type: 'background',
+      paint: { 'background-color': isDark ? '#1b2029' : '#e8eef7' }
+    };
+
+    if (state.tdtKey) {
+      const cfg = TDT_LAYERS[state.baseType] || TDT_LAYERS.vec;
+      return {
+        version: 8,
+        sources: {
+          'base-src': {
+            type: 'raster',
+            tiles: [tdtTileUrl(cfg.base, state.tdtKey)],
+            tileSize: 256,
+            minzoom: 1,
+            maxzoom: cfg.maxzoom,
+            attribution: '© 天地图'
+          },
+          'anno-src': {
+            type: 'raster',
+            tiles: [tdtTileUrl(cfg.anno, state.tdtKey)],
+            tileSize: 256,
+            minzoom: 1,
+            maxzoom: cfg.maxzoom,
+            attribution: '© 天地图'
+          }
+        },
+        layers: [
+          background,
+          { id: 'base-layer', type: 'raster', source: 'base-src' },
+          {
+            id: 'anno-layer',
+            type: 'raster',
+            source: 'anno-src',
+            layout: { visibility: state.labels ? 'visible' : 'none' }
+          }
+        ]
+      };
+    }
+
+    // 未填写 Key：不加载任何底图，只保留纯色画布
+    return {
+      version: 8,
+      sources: {},
+      layers: [background]
+    };
+  }
+
+  /** 读取当前相机参数（用于重建底图后保持视角） */
+  function getMapCamera() {
+    if (!map) {
+      return { center: DEFAULT_CENTER.slice(), zoom: DEFAULT_ZOOM, bearing: 0, pitch: 0 };
+    }
+    const c = map.getCenter();
+    return {
+      center: [c.lng, c.lat],
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch()
+    };
+  }
+
+  /** 创建地图实例 */
+  function createMap(camera) {
+    const cam = camera || {};
+
+    // 若已有地图（例如定位回调与 Key 保存发生竞争），先清理旧实例
+    if (map) {
+      if (state.marker) {
+        state.marker.remove();
+        state.marker = null;
+      }
+      map.remove();
+      map = null;
+    }
+
+    map = new maplibregl.Map({
+      container: 'map',
+      style: buildMapStyle(),
+      center: cam.center || DEFAULT_CENTER,
+      zoom: typeof cam.zoom === 'number' ? cam.zoom : DEFAULT_ZOOM,
+      bearing: cam.bearing || 0,
+      pitch: cam.pitch || 0,
+      minZoom: 2,
+      maxZoom: 18,
+      attributionControl: false,
+      dragRotate: true
+    });
+
+    // 左下角比例尺（原生控件，随缩放自动更新）
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-left');
+
+    map.on('load', function () {
+      map.resize();
+      if (state.lastLocation) placeGeoMarker(state.lastLocation);
+    });
+
+    // 首屏瓦片就绪（或最多 9 秒）后再收起定位遮罩，避免露出空白画布
+    map.once('idle', hideLocateOverlay);
+    if ($('locateOverlay') && !$('locateOverlay').classList.contains('hidden')) {
+      locateOverlayTimer = setTimeout(hideLocateOverlay, 9000);
+    }
+
+    map.on('move', scheduleMapReadout);
+    map.on('zoom', scheduleMapReadout);
+    map.on('rotate', updateCompass);
+    map.on('zoomend', function () {
+      if (!terrainZoomHinted && state.baseType === 'ter' && map.getZoom() >= 15) {
+        terrainZoomHinted = true;
+        toast('天地图地形数据最高 14 级，当前为 14 级瓦片放大显示');
+      }
+    });
+
+    let keyErrorNotified = false;
+    map.on('error', function (e) {
+      const error = e && e.error ? e.error : e;
+      const status = error && error.status;
+      if (!keyErrorNotified && state.tdtKey && (status === 401 || status === 403)) {
+        keyErrorNotified = true;
+        toast('天地图瓦片加载失败，请确认 Key 为「浏览器端」类型且已启用天地图服务');
+      }
+      // 瓦片错误不打断页面，只在控制台提示
+      console.warn('[MapLibre]', error);
+    });
+
+    updateCredits(state.tdtKey ? 'tdt' : 'none');
+    updateMapUI();
+  }
+
+  /** 重建地图（切换有无 Key 时使用，保留当前视角） */
+  function rebuildMap() {
+    // 启动定位阶段地图还没创建；等 finishStartup 按定位结果创建即可，
+    // 避免此时先创建西安视角，破坏“先定位再显示地图”的流程。
+    if (!map) return;
+    const camera = getMapCamera();
+    if (state.marker) {
+      state.marker.remove();
+      state.marker = null;
+    }
+    map.remove();
+    map = null;
+    createMap(camera);
+  }
+
+  /* =======================================================
+     地图读数、指北针、上下文提示
+     ======================================================= */
+  let readoutRaf = null;
+  function scheduleMapReadout() {
+    if (readoutRaf) return;
+    readoutRaf = requestAnimationFrame(function () {
+      readoutRaf = null;
+      updateMapUI();
+    });
+  }
+
+  function formatLng(v) {
+    return Math.abs(v).toFixed(4) + '°' + (v >= 0 ? 'E' : 'W');
+  }
+  function formatLat(v) {
+    return Math.abs(v).toFixed(4) + '°' + (v >= 0 ? 'N' : 'S');
+  }
+
+  function updateMapUI() {
+    if (map) {
+      const c = map.getCenter();
+      const z = map.getZoom();
+      $('readoutText').textContent =
+        formatLng(c.lng) + ' · ' + formatLat(c.lat) + ' · Z ' + z.toFixed(2);
+    }
+    updateCompass();
+  }
+
+  function updateCompass() {
+    if (!map) return;
+    const svg = $('btnCompass').querySelector('svg');
+    if (svg) svg.style.transform = 'rotate(' + (-map.getBearing()) + 'deg)';
+  }
+
+  /* =======================================================
+     底图切换、Key 保存、注记开关
+     ======================================================= */
+  function updateBaseUI() {
+    document.querySelectorAll('#baseSeg button').forEach(function (btn) {
+      const type = btn.dataset.base;
+      btn.classList.toggle('active', type === state.baseType);
+      btn.classList.toggle('disabled', !state.tdtKey);
+    });
+    $('labelSwitch').disabled = !state.tdtKey;
+    $('labelSwitch').checked = state.labels;
+    $('noKeyHint').style.display = state.tdtKey ? 'none' : 'block';
+    $('tdtKey').value = state.tdtKey;
+  }
+
+  function applyBaseType(type) {
+    if (!TDT_LAYERS[type]) return;
+    const prevType = state.baseType;
+    state.baseType = type;
+    store.set(LS.base, type);
+    updateBaseUI();
+
+    if (!state.tdtKey) {
+      toast('请先填写并保存天地图 Key');
+      return;
+    }
+
+    if (!map) return;
+    const cfg = TDT_LAYERS[type];
+    const prevCfg = TDT_LAYERS[prevType];
+
+    // 不同底图可用级别不同（地形最高 14 级）。setTiles() 不会修改
+    // source 的 maxzoom，必须重建样式，MapLibre 才会在 14 级以上
+    // 放大最后一级瓦片，而不是继续请求 15+ 级的空白占位图。
+    if (prevType !== type && (!prevCfg || prevCfg.maxzoom !== cfg.maxzoom)) {
+      rebuildMap();
+    } else {
+      const baseSrc = map.getSource('base-src');
+      const annoSrc = map.getSource('anno-src');
+
+      if (baseSrc && typeof baseSrc.setTiles === 'function') {
+        baseSrc.setTiles([tdtTileUrl(cfg.base, state.tdtKey)]);
+        if (annoSrc && typeof annoSrc.setTiles === 'function') {
+          annoSrc.setTiles([tdtTileUrl(cfg.anno, state.tdtKey)]);
+        }
+        map.setLayoutProperty('anno-layer', 'visibility', state.labels ? 'visible' : 'none');
+      } else {
+        // 样式结构不同，直接重建
+        rebuildMap();
+      }
+    }
+
+    const baseLabel = { vec: '矢量', img: '影像', ter: '地形' }[type] || type;
+    toast('底图已切换为' + baseLabel +
+          (type === 'ter' ? '（地形数据最高 14 级，更高层级为放大显示）' : ''));
+  }
+
+  function saveTdtKey() {
+    const value = $('tdtKey').value.trim();
+    const changed = value !== state.tdtKey;
+    state.tdtKey = value;
+    store.set(LS.tdtKey, value);
+    updateBaseUI();
+
+    if (changed) {
+      rebuildMap();
+      toast(value ? '天地图 Key 已保存，正在加载天地图底图'
+                  : '已清除 Key，底图已关闭');
+    } else {
+      toast(value ? '天地图 Key 已保存' : '天地图 Key 为空，底图保持关闭');
+    }
+  }
+
+  function toggleLabels(checked) {
+    state.labels = checked;
+    store.set(LS.labels, checked ? '1' : '0');
+    if (map && map.getLayer('anno-layer')) {
+      map.setLayoutProperty('anno-layer', 'visibility', checked ? 'visible' : 'none');
+    }
+  }
+
+  /* =======================================================
+     主题（夜间模式）
+     ======================================================= */
+  const MOON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>';
+  const SUN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+
+  function applyTheme(theme, notify) {
+    state.theme = theme;
+    store.set(LS.theme, theme);
+    document.body.classList.toggle('dark', theme === 'dark');
+    $('btnTheme').innerHTML = theme === 'dark' ? SUN_SVG : MOON_SVG;
+    $('btnTheme').title = theme === 'dark' ? '切换浅色模式' : '切换夜间模式';
+    if (map && map.getLayer('bg')) {
+      map.setPaintProperty('bg', 'background-color', theme === 'dark' ? '#1b2029' : '#e8eef7');
+    }
+    if (notify) toast(theme === 'dark' ? '已开启夜间模式' : '已切换浅色模式');
+  }
+
+  function toggleTheme() {
+    applyTheme(state.theme === 'dark' ? 'light' : 'dark', true);
+  }
+
+  /* =======================================================
+     定位：打开等待层、启动定位、蓝点
+     ======================================================= */
+  function setLocateOverlay(title, sub) {
+    $('locateTitle').textContent = title;
+    $('locateSub').textContent = sub;
+  }
+
+  function showLocateOverlay(title, sub) {
+    setLocateOverlay(title, sub);
+    $('locateOverlay').classList.remove('hidden');
+    $('btnSkipLocate').hidden = false;
+    $('btnLocate').disabled = true;
+  }
+
+  function hideLocateOverlay() {
+    const el = $('locateOverlay');
+    if (!el) return;
+    el.classList.add('hidden');
+    if (locateOverlayTimer) {
+      clearTimeout(locateOverlayTimer);
+      locateOverlayTimer = null;
+    }
+    $('btnLocate').disabled = false;
+  }
+
+  function geoErrorMessage(code) {
+    const messages = {
+      1: '定位权限被拒绝，请在浏览器地址栏允许定位',
+      2: '定位不可用，请检查系统定位服务',
+      3: '定位超时，请重试'
+    };
+    return messages[code] || '定位失败';
+  }
+
+  /** 定位完成（或失败/跳过）后才创建地图；等待期间保持定位遮罩 */
+  function finishStartup(center, zoom, message) {
+    if (startupResolved) return;
+    startupResolved = true;
+    setLocateOverlay('正在加载地图…', '正在加载天地图底图');
+    $('btnSkipLocate').hidden = true;
+    createMap({ center: center, zoom: zoom, bearing: 0, pitch: 0 });
+    if (message) toast(message);
+  }
+
+  /** 页面打开时先定位，不先创建西安视角的地图 */
+  function startWithLocation() {
+    showLocateOverlay('正在定位当前位置…', '首次使用请允许浏览器定位');
+    if (!navigator.geolocation) {
+      finishStartup(DEFAULT_CENTER, DEFAULT_ZOOM, '当前浏览器不支持定位，已使用默认位置');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        if (startupResolved) return;
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        state.lastLocation = [lng, lat];
+        finishStartup([lng, lat], LOCATION_ZOOM, '已定位到当前位置');
+      },
+      function (err) {
+        if (startupResolved) return;
+        finishStartup(DEFAULT_CENTER, DEFAULT_ZOOM,
+          geoErrorMessage(err.code) + '，已使用默认位置');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  }
+
+  function placeGeoMarker(lngLat) {
+    if (!map) return;
+    if (state.marker) {
+      state.marker.remove();
+      state.marker = null;
+    }
+    const el = document.createElement('div');
+    el.className = 'geo-marker';
+    state.marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(lngLat)
+      .addTo(map);
+  }
+
+  /** 手动「定位当前位置」按钮：地图已存在，平滑飞过去 */
+  function locateCurrentPosition() {
+    if (!navigator.geolocation) {
+      toast('当前浏览器不支持定位');
+      return;
+    }
+    if (!map) return; // 启动定位完成前按钮处于禁用状态
+    toast('正在获取当前位置…');
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        state.lastLocation = [lng, lat];
+        placeGeoMarker([lng, lat]);
+        map.flyTo({
+          center: [lng, lat],
+          zoom: Math.max(map.getZoom(), LOCATION_ZOOM),
+          duration: 1200
+        });
+        toast('已定位到当前位置');
+      },
+      function (err) {
+        toast(geoErrorMessage(err.code));
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
+  }
+
+  /* =======================================================
+     全屏
+     ======================================================= */
+  function toggleFullscreen() {
+    const pane = $('mapPane');
+    if (!document.fullscreenElement) {
+      if (pane.requestFullscreen) {
+        pane.requestFullscreen().catch(function () { toast('当前浏览器不允许全屏'); });
+      } else {
+        toast('当前浏览器不支持全屏');
+      }
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  document.addEventListener('fullscreenchange', function () {
+    setTimeout(function () { if (map) map.resize(); }, 160);
+  });
+
+  /* =======================================================
+     设置卡片显示 / 隐藏
+     ======================================================= */
+  function toggleSettings(force) {
+    const card = $('settingsCard');
+    const show = typeof force === 'boolean' ? force : card.classList.contains('hidden');
+    card.classList.toggle('hidden', !show);
+  }
+
+  /* =======================================================
+     DeepSeek Harness 原版 Web UI（iframe 内嵌）
+     -------------------------------------------------------
+     右侧不再自绘对话，而是直接加载官方 dsh web 界面。
+     浏览器 SameSite=Strict 会拦截 file:// 页面的内嵌登录态，
+     因此正式使用需通过同目录的「启动地图对话.bat」以
+     http://127.0.0.1:3090/map-chat.html 打开本页。
+     ======================================================= */
+  const HARNESS_LOCAL_PAGE = 'http://127.0.0.1:3090/map-chat.html';
+  const harnessFrame = $('harnessFrame');
+  const harnessLoading = $('harnessLoading');
+  const harnessNotice = $('harnessNotice');
+  const isFilePage = location.protocol === 'file:';
+  let harnessTimer = null;
+
+  /** 规范化 Harness 地址；返回 null 表示格式非法 */
+  function normalizeHarnessUrl(raw) {
+    let value = String(raw || '').trim();
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) value = 'http://' + value;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      return parsed.href.replace(/\/$/, '');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function showHarnessNotice(cfg) {
+    $('noticeTitle').textContent = cfg.title;
+    $('noticeBody').innerHTML = cfg.body;
+    const cmd = $('noticeCmd');
+    if (cfg.cmd) {
+      cmd.textContent = cfg.cmd;
+      cmd.hidden = false;
+    } else {
+      cmd.hidden = true;
+    }
+    const action = $('noticeAction');
+    if (cfg.actionText) {
+      action.textContent = cfg.actionText;
+      action.href = cfg.actionHref;
+      action.hidden = false;
+    } else {
+      action.hidden = true;
+    }
+    harnessNotice.hidden = false;
+    harnessFrame.hidden = true;
+    harnessLoading.classList.add('hidden');
+  }
+
+  /** 加载原版 Harness（加时间戳避免浏览器缓存旧页面） */
+  function loadHarness(quiet) {
+    clearTimeout(harnessTimer);
+    const url = normalizeHarnessUrl(state.harnessUrl);
+
+    if (url === null) {
+      toast('Harness 地址格式不正确');
+      return;
+    }
+
+    if (!url) {
+      showHarnessNotice({
+        title: '请配置 Harness 地址',
+        body: '填写本机运行的 <b>dsh web</b> 地址（默认 <b>http://127.0.0.1:3080</b>），' +
+              '点击「应用」后，右侧将直接加载原版 DeepSeek Harness 界面。',
+        cmd: 'npm run web'
+      });
+      return;
+    }
+
+    state.harnessUrl = url;
+
+    if (isFilePage) {
+      showHarnessNotice({
+        title: '需要通过本地服务打开',
+        body: '浏览器会拦截 <b>file://</b> 页面内嵌的 Harness 登录 Cookie（SameSite=Strict）。' +
+              '请双击同目录的 <b>启动地图对话.bat</b>，它会同时启动 dsh web、本地服务和登录页。',
+        cmd: HARNESS_LOCAL_PAGE,
+        actionText: '打开本地版本',
+        actionHref: HARNESS_LOCAL_PAGE
+      });
+      return;
+    }
+
+    harnessNotice.hidden = true;
+    harnessFrame.hidden = false;
+    harnessLoading.classList.remove('hidden');
+
+    const join = url.indexOf('?') >= 0 ? '&' : '?';
+    harnessFrame.src = url + join + '_dsh_panel=' + Date.now();
+
+    // 若网络异常导致 load 一直不触发，10 秒后收起加载层，直接展示浏览器错误页
+    harnessTimer = setTimeout(function () {
+      harnessLoading.classList.add('hidden');
+    }, 10000);
+
+    if (!quiet) toast('正在加载 DeepSeek Harness…');
+  }
+
+  harnessFrame.addEventListener('load', function () {
+    if (isFilePage || harnessFrame.hidden || !harnessFrame.getAttribute('src')) return;
+    clearTimeout(harnessTimer);
+    harnessLoading.classList.add('hidden');
+  });
+
+  function applyHarnessUrl() {
+    const raw = $('harnessUrl').value;
+    const url = normalizeHarnessUrl(raw);
+
+    if (url === null) {
+      toast('地址格式不正确，请以 http:// 或 https:// 开头');
+      return;
+    }
+
+    state.harnessUrl = url;
+    store.set(LS.harnessUrl, url);
+    $('harnessUrl').value = url;
+    loadHarness(false);
+    toast(url ? 'Harness 地址已应用' : '已清空 Harness 地址');
+  }
+
+  function openHarnessExternal() {
+    const url = normalizeHarnessUrl(state.harnessUrl);
+    if (!url) {
+      toast('请先填写并应用 Harness 地址');
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function reloadHarness() {
+    loadHarness(false);
+    toast('正在重新加载 DeepSeek Harness…');
+  }
+
+  function bindHarnessEvents() {
+    $('applyHarness').addEventListener('click', applyHarnessUrl);
+    $('harnessUrl').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyHarnessUrl();
+      }
+    });
+    $('btnOpenHarness').addEventListener('click', openHarnessExternal);
+    $('btnReloadHarness').addEventListener('click', reloadHarness);
+  }
+
+  /* =======================================================
+     地图事件绑定
+     ======================================================= */
+  function bindMapEvents() {
+    $('btnZoomIn').addEventListener('click', function () {
+      if (!map) return;
+      map.easeTo({ zoom: Math.min(map.getZoom() + 1, map.getMaxZoom()), duration: 300 });
+    });
+
+    $('btnZoomOut').addEventListener('click', function () {
+      if (!map) return;
+      map.easeTo({ zoom: Math.max(map.getZoom() - 1, map.getMinZoom()), duration: 300 });
+    });
+
+    $('btnCompass').addEventListener('click', function () {
+      if (!map) return;
+      map.easeTo({ bearing: 0, pitch: 0, duration: 500 });
+    });
+
+    $('btnFullscreen').addEventListener('click', toggleFullscreen);
+    $('btnLocate').addEventListener('click', locateCurrentPosition);
+    $('btnSkipLocate').addEventListener('click', function () {
+      finishStartup(DEFAULT_CENTER, DEFAULT_ZOOM, '已跳过定位，使用默认位置');
+    });
+    $('btnTheme').addEventListener('click', toggleTheme);
+    $('btnGear').addEventListener('click', function () { toggleSettings(); });
+    $('cardClose').addEventListener('click', function () { toggleSettings(false); });
+
+    $('saveKey').addEventListener('click', saveTdtKey);
+    $('tdtKey').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') saveTdtKey();
+    });
+
+    document.querySelectorAll('#baseSeg button').forEach(function (btn) {
+      btn.addEventListener('click', function () { applyBaseType(btn.dataset.base); });
+    });
+
+    $('labelSwitch').addEventListener('change', function (e) {
+      toggleLabels(e.target.checked);
+    });
+
+    // Esc 收起地图设置卡片
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') toggleSettings(false);
+    });
+
+    // 全屏状态变化时更新按钮标题
+    document.addEventListener('fullscreenchange', function () {
+      $('btnFullscreen').title = document.fullscreenElement ? '退出全屏' : '全屏';
+    });
+  }
+
+  /* =======================================================
+     初始化
+     ======================================================= */
+  function init() {
+    // 主题先应用，保证地图背景色一致
+    applyTheme(state.theme, false);
+
+    // 地图设置回填（首次打开自动填入默认天地图 Key）
+    $('tdtKey').value = state.tdtKey;
+    updateBaseUI();
+
+    // Harness 地址回填并加载原版界面
+    $('harnessUrl').value = state.harnessUrl;
+    loadHarness(true);
+
+    bindMapEvents();
+    bindHarnessEvents();
+
+    // 先显示定位等待层；定位成功、失败或被跳过后才创建地图，
+    // 不再先锁定西安视角再跳转。
+    startWithLocation();
+
+    if (!state.tdtKey) {
+      toast('未填写天地图 Key，底图已关闭');
+    }
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>
+
