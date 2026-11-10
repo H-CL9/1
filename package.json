@@ -1,0 +1,21 @@
+{
+  "name": "deepseek-harness-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local DeepSeek Harness Web UI workspace",
+  "license": "MIT",
+  "scripts": {
+    "web": "dsh web",
+    "web:no-open": "dsh web --no-open"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.2-rc.1"
+  },
+  "allowScripts": {
+    "@deepseek-ai/dsh-subprocess-local@0.2.2-rc.1": true,
+    "@google/genai@2.21.0": true,
+    "koffi@3.1.1": true,
+    "node-pty@1.2.0-beta.15": true,
+    "protobufjs@7.6.6": true
+  }
+}
